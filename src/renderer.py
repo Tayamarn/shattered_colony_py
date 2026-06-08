@@ -23,6 +23,8 @@ from camera import Camera
 _ROOF_FILL      = (195, 175, 155)
 _ROOF_SCAVENGED = ( 90,  78,  65)   # darker tint — building has been looted
 _ROOF_EDGE      = ( 80,  65,  50)
+_DOOR_FRAME     = (110,  75,  45)   # warm brown door surround
+_DOOR_FILL      = ( 55,  35,  15)   # dark interior
 _PLANK        = (125,  95,  45)
 _TREE         = ( 30, 115,  30)
 _SHADOW       = ( 20,  20,  20)
@@ -84,6 +86,44 @@ class Renderer:
         for r in range(r0, r1):
             for c in range(c0, c1):
                 self._draw_tile(world.tile_at(r, c), r, c, cx, cy, world)
+
+    def draw_entrances(self, world, camera: Camera) -> None:
+        """Door frame on each building's facade + doormat on the entrance tile."""
+        T    = TILE_SIZE
+        seen = set()
+        for bd in world.building_data.values():
+            bid = id(bd)
+            if bid in seen or bd.entrance_r is None:
+                continue
+            seen.add(bid)
+            er, ec = bd.entrance_r, bd.entrance_c
+            # Find the building tile that the entrance faces
+            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                br, bc = er + dr, ec + dc
+                if world.get_building(br, bc) is not bd:
+                    continue
+                bsx, bsy = camera.world_to_screen(bc * T, br * T)
+                # Door frame on the building face adjacent to entrance
+                # dr/dc is direction FROM entrance TO building
+                if dr == -1:   # building above entrance → door on its bottom face
+                    door = pygame.Rect(bsx + T//3,  bsy + T - 6, T//3, 6)
+                elif dr == 1:  # building below entrance → door on its top face
+                    door = pygame.Rect(bsx + T//3,  bsy,         T//3, 6)
+                elif dc == -1: # building left of entrance → door on its right face
+                    door = pygame.Rect(bsx + T - 6, bsy + T//3,  6, T//3)
+                else:          # building right of entrance → door on its left face
+                    door = pygame.Rect(bsx,          bsy + T//3,  6, T//3)
+                pygame.draw.rect(self._screen, _DOOR_FRAME, door)
+                # Small doormat on the entrance (street) tile
+                esx, esy = camera.world_to_screen(ec * T, er * T)
+                mat_w, mat_h = T // 3, T // 4
+                pygame.draw.rect(
+                    self._screen, _DOOR_FILL,
+                    pygame.Rect(esx + (T - mat_w) // 2,
+                                esy + (T - mat_h) // 2,
+                                mat_w, mat_h),
+                )
+                break
 
     def draw_towers(self, world, camera: Camera) -> None:
         T = TILE_SIZE
@@ -301,10 +341,24 @@ class Renderer:
         pygame.draw.rect(self._screen, COLORS[tile], rect)
 
         if tile == Tile.BUILDING:
-            bd = world.get_building(r, c) if world is not None else None
+            bd   = world.get_building(r, c) if world is not None else None
             roof = _ROOF_SCAVENGED if (bd and bd.scavenged) else _ROOF_FILL
-            pygame.draw.rect(self._screen, roof, rect.inflate(-8, -8))
-            pygame.draw.rect(self._screen, _ROOF_EDGE, rect, 1)
+            # Fill the full tile so adjacent group-tiles form a seamless mass
+            pygame.draw.rect(self._screen, roof, rect)
+            # Draw edges at exterior faces AND at parcel boundaries (adjacent
+            # building tile belonging to a different BuildingData object).
+            for dr, dc, ex, ey, ew, eh in (
+                (-1, 0,  x,       y,       T,  1),
+                ( 1, 0,  x,       y+T-1,   T,  1),
+                ( 0,-1,  x,       y,       1,  T),
+                ( 0, 1,  x+T-1,   y,       1,  T),
+            ):
+                nr, nc = r + dr, c + dc
+                if (world is None
+                        or world.tile_at(nr, nc) != Tile.BUILDING
+                        or world.get_building(nr, nc) is not bd):
+                    pygame.draw.rect(self._screen, _ROOF_EDGE,
+                                     pygame.Rect(ex, ey, ew, eh))
 
         elif tile == Tile.BRIDGE:
             if c == BRIDGE_COL:          # vertical bridge → horizontal planks

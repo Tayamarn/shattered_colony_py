@@ -193,6 +193,7 @@ class Game:
 
         build_active = self._input.mode == Mode.BUILD
         self._renderer.draw_world(self._world, self._camera)
+        self._renderer.draw_entrances(self._world, self._camera)
         self._renderer.draw_towers(self._world, self._camera)
         self._renderer.draw_projectiles(self._projectiles, self._camera)
         self._renderer.draw_zombies(self._zombies, self._camera)

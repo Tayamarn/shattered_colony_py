@@ -35,8 +35,8 @@ class World:
     def __init__(
         self, grid: list[list[Tile]], building_data: dict | None = None
     ) -> None:
-        self._grid          = grid
-        self._building_data = building_data or {}
+        self._grid         = grid
+        self.building_data = building_data or {}
         self.towers: dict   = {}   # (r, c) → SniperTower; populated at runtime
         self.rows    = len(grid)
         self.cols    = len(grid[0]) if grid else 0
@@ -47,7 +47,7 @@ class World:
 
     def get_building(self, r: int, c: int):
         """Return BuildingData for tile (r, c), or None if not a building."""
-        return self._building_data.get((r, c))
+        return self.building_data.get((r, c))
 
     # ── Line-of-sight ─────────────────────────────────────────────────────────
 

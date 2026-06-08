@@ -160,3 +160,47 @@ def test_building_data_ammo_in_range(map_data):
 
 def test_building_data_not_scavenged_on_start(map_data):
     assert all(not bd.scavenged for bd in map_data.building_data.values())
+
+def test_all_building_groups_have_entrance(map_data):
+    """Every connected building group on the generated island must have an entrance."""
+    seen = set()
+    for bd in map_data.building_data.values():
+        bid = id(bd)
+        if bid in seen:
+            continue
+        seen.add(bid)
+        assert bd.entrance_r is not None and bd.entrance_c is not None, \
+            "Building group has no entrance"
+
+def test_entrance_tiles_are_walkable(map_data):
+    from tiles import WALKABLE
+    grid = map_data.grid
+    seen = set()
+    for bd in map_data.building_data.values():
+        bid = id(bd)
+        if bid in seen or bd.entrance_r is None:
+            continue
+        seen.add(bid)
+        assert grid[bd.entrance_r][bd.entrance_c] in WALKABLE, \
+            f"Entrance at ({bd.entrance_r},{bd.entrance_c}) is not walkable"
+
+def test_large_connected_group_has_multiple_buildings(map_data):
+    """Any connected building region above the split threshold must be split
+    into more than one parcel (distinct BuildingData objects)."""
+    from map_gen import _SPLIT_THRESHOLD, _flood_fill
+    from tiles import Tile
+    from config import ROWS, COLS
+    grid = map_data.grid
+    bd   = map_data.building_data
+    visited: set = set()
+    for r in range(ROWS):
+        for c in range(COLS):
+            if grid[r][c] != Tile.BUILDING or (r, c) in visited:
+                continue
+            group = _flood_fill(grid, ROWS, COLS, r, c)
+            visited |= group
+            if len(group) > _SPLIT_THRESHOLD:
+                distinct = len({id(bd[t]) for t in group})
+                assert distinct > 1, (
+                    f"Connected group of {len(group)} tiles has only 1 BuildingData"
+                )

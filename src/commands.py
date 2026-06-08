@@ -13,7 +13,6 @@ from typing import Callable
 
 from config import ARRIVAL_RADIUS, SCAVENGE_DURATION
 from pathfinding import find_path
-from tiles import WALKABLE
 
 
 class MoveCommand:
@@ -52,9 +51,7 @@ class MoveCommand:
 
 
 class ScavengeCommand:
-    """Walk a colonist to a building, work SCAVENGE_DURATION seconds, collect loot."""
-
-    _CARDINALS = ((-1, 0), (1, 0), (0, -1), (0, 1))
+    """Walk a colonist to a building's entrance, work SCAVENGE_DURATION seconds, collect loot."""
 
     def __init__(
         self,
@@ -95,25 +92,18 @@ class ScavengeCommand:
         return min(1.0, self._work_timer / SCAVENGE_DURATION)
 
     def _start_navigate(self, colonist, world) -> None:
-        start_r, start_c = world.pixel_to_grid(colonist.x, colonist.y)
-        adj = [
-            (self._br + dr, self._bc + dc)
-            for dr, dc in self._CARDINALS
-            if world.tile_at(self._br + dr, self._bc + dc) in WALKABLE
-        ]
-        if not adj:
+        bd = world.get_building(self._br, self._bc)
+        if bd is None or bd.entrance_r is None:
             self._state = "done"
             return
-        if (start_r, start_c) in adj:
+        er, ec = bd.entrance_r, bd.entrance_c
+        start_r, start_c = world.pixel_to_grid(colonist.x, colonist.y)
+        if (start_r, start_c) == (er, ec):
             self._state = "work"
             return
-        best_path: list | None = None
-        for goal_r, goal_c in adj:
-            path = find_path(world, start_r, start_c, goal_r, goal_c)
-            if path and (best_path is None or len(path) < len(best_path)):
-                best_path = path
-        if best_path:
-            self._nav = MoveCommand(best_path)
+        path = find_path(world, start_r, start_c, er, ec)
+        if path:
+            self._nav = MoveCommand(path)
             self._state = "navigate"
         else:
             self._state = "done"

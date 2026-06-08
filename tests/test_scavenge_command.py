@@ -41,8 +41,11 @@ def _resources():
     return ns
 
 
-def _building(wood=10, ammo=5, has_colonist=False, scavenged=False):
-    return BuildingData(wood=wood, ammo=ammo,
+def _building(entrance_r=0, entrance_c=1, wood=10, ammo=5,
+              has_colonist=False, scavenged=False):
+    """BuildingData with entrance defaulting to (0,1) — the test world's entrance."""
+    return BuildingData(entrance_r=entrance_r, entrance_c=entrance_c,
+                        wood=wood, ammo=ammo,
                         has_colonist=has_colonist, scavenged=scavenged)
 
 
@@ -53,8 +56,7 @@ def _small_world(extra_building_data=None):
       row 1:  STREET  STREET  STREET    WATER
       row 2:  WATER   WATER   WATER     WATER
 
-    Building is at (0, 2).  Its adjacent walkable tile is (0, 1) and (1, 2).
-    Colonist can approach from (0, 1) or (1, 2).
+    Building group: {(0,2)}.  Entrance: (0,1) — the street tile to the left.
     """
     S, B, W = Tile.STREET, Tile.BUILDING, Tile.WATER
     grid = [
@@ -62,7 +64,7 @@ def _small_world(extra_building_data=None):
         [S, S, S, W],
         [W, W, W, W],
     ]
-    bd = {(0, 2): _building()}
+    bd = {(0, 2): _building(entrance_r=0, entrance_c=1)}
     if extra_building_data:
         bd.update(extra_building_data)
     return World(grid, bd)
@@ -98,7 +100,7 @@ class TestAlreadyAdjacent:
         assert done
 
     def test_awards_wood_on_completion(self):
-        world = _small_world({(0, 2): _building(wood=7, ammo=3)})
+        world = _small_world({(0, 2): _building(wood=7, ammo=3, entrance_r=0, entrance_c=1)})
         res   = _resources()
         col   = _colonist(0, 1)
         cmd   = ScavengeCommand(_BUILDING_R, _BUILDING_C, res, lambda x, y: None)
@@ -106,7 +108,7 @@ class TestAlreadyAdjacent:
         assert res.earned.get('wood') == 7
 
     def test_awards_ammo_on_completion(self):
-        world = _small_world({(0, 2): _building(wood=0, ammo=4)})
+        world = _small_world({(0, 2): _building(wood=0, ammo=4, entrance_r=0, entrance_c=1)})
         res   = _resources()
         col   = _colonist(0, 1)
         cmd   = ScavengeCommand(_BUILDING_R, _BUILDING_C, res, lambda x, y: None)
@@ -134,7 +136,7 @@ class TestAlreadyAdjacent:
 
 class TestRescueCallback:
     def test_on_rescue_called_when_has_colonist(self):
-        world   = _small_world({(0, 2): _building(has_colonist=True)})
+        world   = _small_world({(0, 2): _building(has_colonist=True, entrance_r=0, entrance_c=1)})
         rescued = []
         col     = _colonist(0, 1)
         cmd     = ScavengeCommand(
@@ -146,7 +148,7 @@ class TestRescueCallback:
         assert len(rescued) == 1
 
     def test_on_rescue_not_called_when_no_colonist(self):
-        world   = _small_world({(0, 2): _building(has_colonist=False)})
+        world   = _small_world({(0, 2): _building(has_colonist=False, entrance_r=0, entrance_c=1)})
         rescued = []
         col     = _colonist(0, 1)
         cmd     = ScavengeCommand(
@@ -162,7 +164,7 @@ class TestRescueCallback:
 
 class TestAlreadyScavenged:
     def test_no_loot_if_already_scavenged(self):
-        world = _small_world({(0, 2): _building(wood=10, ammo=5, scavenged=True)})
+        world = _small_world({(0, 2): _building(wood=10, ammo=5, scavenged=True, entrance_r=0, entrance_c=1)})
         res   = _resources()
         col   = _colonist(0, 1)
         cmd   = ScavengeCommand(_BUILDING_R, _BUILDING_C, res, lambda x, y: None)
@@ -171,7 +173,7 @@ class TestAlreadyScavenged:
         assert res.earned.get('ammo', 0) == 0
 
     def test_on_rescue_not_called_if_already_scavenged(self):
-        world   = _small_world({(0, 2): _building(has_colonist=True, scavenged=True)})
+        world   = _small_world({(0, 2): _building(has_colonist=True, scavenged=True, entrance_r=0, entrance_c=1)})
         rescued = []
         col     = _colonist(0, 1)
         cmd     = ScavengeCommand(
@@ -202,7 +204,7 @@ class TestNavigation:
         assert done
 
     def test_loot_awarded_after_navigation(self):
-        world = _small_world({(0, 2): _building(wood=9, ammo=3)})
+        world = _small_world({(0, 2): _building(wood=9, ammo=3, entrance_r=0, entrance_c=1)})
         res   = _resources()
         col   = _colonist(1, 0)
         cmd   = ScavengeCommand(_BUILDING_R, _BUILDING_C, res, lambda x, y: None)
@@ -213,17 +215,17 @@ class TestNavigation:
 # ── No accessible neighbor ────────────────────────────────────────────────────
 
 class TestInaccessible:
-    def test_completes_immediately_if_no_walkable_neighbor(self):
-        # Building surrounded entirely by WATER — no adjacent walkable tile
+    def test_completes_immediately_if_entrance_is_none(self):
+        # BuildingData with no entrance (entrance_r=None) → command is a no-op
         grid = [
             [Tile.WATER,    Tile.WATER,    Tile.WATER],
             [Tile.WATER,    Tile.BUILDING, Tile.WATER],
             [Tile.WATER,    Tile.WATER,    Tile.WATER],
         ]
-        world = World(grid, {(1, 1): _building()})
+        # Explicitly no entrance
+        bd = BuildingData(entrance_r=None, entrance_c=None, wood=5, ammo=2)
+        world = World(grid, {(1, 1): bd})
         col   = _colonist(0, 0)
-        col.x, col.y = float(0 * T + _HALF), float(0 * T + _HALF)
         cmd   = ScavengeCommand(1, 1, _resources(), lambda x, y: None)
-        # Should return True (no-op done) on first tick
-        done = cmd.execute(col, 0.1, world)
+        done  = cmd.execute(col, 0.1, world)
         assert done
